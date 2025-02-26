@@ -32,352 +32,293 @@
 ![ApexCharts](https://img.shields.io/badge/ApexCharts-00E396?style=for-the-badge&logo=chart.js&logoColor=white)
 ![React Router](https://img.shields.io/badge/React_Router-CA4245?style=for-the-badge&logo=react-router&logoColor=white)
 
-## ✨ 주요 기능
+## 🔍 주요 구현 내용
 
-### 1. 포켓몬 목록 및 검색
+### Redux 상태 관리
 
-- 전체 포켓몬 목록 표시 (1~9세대)
-- 이름 기반 포켓몬 검색 기능
-- 부트업 애니메이션 (포켓몬 게임 스타일)
-
-### 2. 포켓몬 상세 정보
-
-- 포켓몬 기본 정보 (타입, 능력치, 신체 정보 등)
-- 다양한 폼과 메가진화 정보
-- 능력치 그래프 시각화
-
-### 3. 진화 체인 시각화
-
-- 복잡한 진화 체인 데이터 처리 및 시각화
-- 진화 조건 표시
-- 다양한 진화 경로 지원 (분기 진화, 메가진화 등)
+Redux를 사용하여 포켓몬 데이터와 사용자 상호작용을 관리합니다.
 
 ```typescript
-// src/utils/evolutionChainParser.ts - 재귀적 진화 체인 데이터 처리
-interface EvolutionNode {
-  species: {
-    name: string;
-    url: string;
-  };
-  evolution_details: EvolutionDetail[];
-  evolves_to: EvolutionNode[];
+// src/redux/reducers/userReducer.ts
+interface IUserState {
+  selectedPokemon: string;
+  bootup: boolean;
+  menuMode: string;
+  favoritePokemonList: string[];
+  isSearch: boolean;
 }
 
-interface EvolutionDetail {
-  min_level?: number;
-  item?: {
-    name: string;
-  };
-  trigger?: {
-    name: string;
-  };
-  // 기타 진화 조건들...
-}
-
-interface ProcessedEvolution {
-  name: string;
-  id: number;
-  image: string;
-  evolvesTo: ProcessedEvolution[];
-  evolutionDetails: {
-    trigger: string;
-    level?: number;
-    item?: string;
-    condition?: string;
-  }[];
-}
-
-// 재귀적 구조의 진화 체인 데이터를 처리하는 함수
-export const processEvolutionChain = async (
-  chain: EvolutionNode
-): Promise<ProcessedEvolution> => {
-  // 포켓몬 ID 추출 (URL에서)
-  const speciesUrl = chain.species.url;
-  const id = parseInt(
-    speciesUrl.split("/").filter(Boolean).pop() || "0"
-  );
-  
-  // 포켓몬 이미지 URL 생성
-  const imageUrl = `https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/other/official-artwork/${id}.png`;
-  
-  // 진화 조건 처리
-  const evolutionDetails = chain.evolution_details.map(detail => {
-    const trigger = detail.trigger?.name || "unknown";
-    const level = detail.min_level;
-    const item = detail.item?.name;
-    
-    // 진화 조건 텍스트 생성
-    let condition = "";
-    if (trigger === "level-up" && level) {
-      condition = `레벨 ${level}에 진화`;
-    } else if (trigger === "use-item" && item) {
-      condition = `${formatItemName(item)} 사용 시 진화`;
-    } else if (trigger === "trade") {
-      condition = "교환 시 진화";
-    }
-    // 기타 조건들 처리...
-    
-    return { trigger, level, item, condition };
-  });
-  
-  // 재귀적으로 다음 진화 단계 처리
-  const evolvesTo = await Promise.all(
-    chain.evolves_to.map(nextChain => processEvolutionChain(nextChain))
-  );
-  
-  return {
-    name: chain.species.name,
-    id,
-    image: imageUrl,
-    evolvesTo,
-    evolutionDetails,
-  };
+let initialState: IUserState = {
+  selectedPokemon: "",
+  bootup: false,
+  menuMode: "",
+  favoritePokemonList: [],
+  isSearch: false,
 };
 
-// 아이템 이름 포맷팅 함수
-const formatItemName = (name: string): string => {
-  // 아이템 이름 한글화 또는 포맷팅 로직
-  const itemMap: Record<string, string> = {
-    "fire-stone": "불의돌",
-    "water-stone": "물의돌",
-    "thunder-stone": "천둥의돌",
-    // 기타 아이템들...
-  };
-  
-  return itemMap[name] || name.replace(/-/g, " ");
+const userReducer = (state = initialState, action: IUserAction) => {
+  const { type, payload } = action;
+  switch (type) {
+    case "BOOTUP_FINISH":
+      return { ...state, bootup: payload.bootup };
+    case "SELECT":
+      return { ...state, selectedPokemon: payload.name };
+    case "SEARCH_MODE":
+      return { ...state, isSearch: payload.isSearch };
+    case "SLOT_MENU":
+      return { ...state, menuMode: payload.mode };
+    case "ADD_FAVORITES":
+      return {
+        ...state,
+        favoritePokemonList: [...state.favoritePokemonList, payload.name],
+      };
+    case "REMOVE_FAVORITES":
+      return {
+        ...state,
+        favoritePokemonList: state.favoritePokemonList.filter(
+          (pokemon) => pokemon !== payload.name
+        ),
+      };
+    default:
+      return state;
+  }
 };
 ```
 
-### 4. Redux를 활용한 상태 관리
+### 진화 체인 구현 
 
-- 포켓몬 데이터 캐싱 및 관리
-- 즐겨찾기 상태 관리
-- 비동기 데이터 로딩 처리
+포켓몬의 진화 체인을 시각화하고 진화 조건을 표시합니다.
 
 ```typescript
-// src/redux/slices/pokemonSlice.ts - Redux 상태 관리
-import { createSlice, createAsyncThunk, PayloadAction } from '@reduxjs/toolkit';
-import { fetchPokemonList, fetchPokemonDetails, fetchEvolutionChain } from '../../api/pokemonApi';
-
-interface PokemonState {
-  list: Pokemon[];
-  currentPokemon: PokemonDetail | null;
-  evolutionChain: ProcessedEvolution | null;
-  favorites: number[];
-  loading: boolean;
-  error: string | null;
-}
-
-const initialState: PokemonState = {
-  list: [],
-  currentPokemon: null,
-  evolutionChain: null,
-  favorites: JSON.parse(localStorage.getItem('favorites') || '[]'),
-  loading: false,
-  error: null,
+// 진화 트리거 정보 포맷팅 함수
+const formatTriggerDesc = (trigger: IResolvedEvoChain) => {
+  if (!trigger) return "Unknown";
+  
+  switch (trigger.trigger_name) {
+    case "level-up":
+      return `Level ${trigger.min_level || "?"}`;
+    case "use-item":
+      return `Use ${trigger.item_name || "?"}`;
+    case "trade":
+      return "Trade";
+    case "shed":
+      return "Level up (special)";
+    default:
+      return trigger.trigger_name?.replace("-", " ") || "Unknown";
+  }
 };
 
-// 포켓몬 목록 불러오기 (비동기 액션)
-export const fetchPokemonListAsync = createAsyncThunk(
-  'pokemon/fetchList',
-  async (limit: number = 151) => {
-    const response = await fetchPokemonList(limit);
-    return response;
-  }
-);
+// 진화 체인 컴포넌트 렌더링
+<PreEvolutionBox onClick={() => navigate(`/pokemon/${preEvolutionPokemon.name}`)}>
+  <EvolutionTrigger>
+    <FaChevronLeft color="#737373" size={40} />
+    <TriggerContent>
+      <span>Evolves By: </span>
+      <span>
+        {formatTriggerDesc(findPokemonTriggerOrder()?.preEvolutionTrigger)}
+      </span>
+    </TriggerContent>
+  </EvolutionTrigger>
+  <Sprite src={preEvolutionPokemon?.sprites.front_default} data-sound-effect />
+  <span>{preEvolutionPokemon && preEvolutionPokemon.name}</span>
+</PreEvolutionBox>
+```
 
-// 포켓몬 상세 정보 불러오기 (비동기 액션)
-export const fetchPokemonDetailsAsync = createAsyncThunk(
-  'pokemon/fetchDetails',
-  async (id: number) => {
-    const details = await fetchPokemonDetails(id);
-    return details;
-  }
-);
+### 부트업 시퀀스 구현
 
-// 진화 체인 불러오기 (비동기 액션)
-export const fetchEvolutionChainAsync = createAsyncThunk(
-  'pokemon/fetchEvolutionChain',
-  async (url: string) => {
-    const chain = await fetchEvolutionChain(url);
-    const processedChain = await processEvolutionChain(chain.chain);
-    return processedChain;
-  }
-);
+애플리케이션 시작 시 포켓몬 데이터를 로드하고 부트업 애니메이션을 표시합니다.
 
-const pokemonSlice = createSlice({
-  name: 'pokemon',
-  initialState,
-  reducers: {
-    // 즐겨찾기 토글 액션
-    toggleFavorite: (state, action: PayloadAction<number>) => {
-      const pokemonId = action.payload;
-      const index = state.favorites.indexOf(pokemonId);
-      
-      if (index === -1) {
-        state.favorites.push(pokemonId);
-      } else {
-        state.favorites.splice(index, 1);
-      }
-      
-      // 로컬 스토리지에 즐겨찾기 저장
-      localStorage.setItem('favorites', JSON.stringify(state.favorites));
-    },
-    
-    // 상태 초기화 액션
-    clearCurrentPokemon: (state) => {
-      state.currentPokemon = null;
-      state.evolutionChain = null;
-    },
-  },
-  extraReducers: (builder) => {
-    // 포켓몬 목록 로딩 상태 처리
-    builder.addCase(fetchPokemonListAsync.pending, (state) => {
-      state.loading = true;
-      state.error = null;
+```typescript
+// src/components/Bootup.tsx
+const Bootup = ({
+  isLoading,
+  progress,
+}: {
+  isLoading: boolean;
+  progress: number;
+}) => {
+  const dispatch = useAppDispatch();
+  const [isPreboot, setIsPreboot] = useState(true);
+
+  useEffect(() => {
+    !isLoading && setIsPreboot(false);
+  }, [isLoading]);
+
+  const bootupCompleted = () => {
+    dispatch({
+      type: "BOOTUP_FINISH",
+      payload: {
+        bootup: true,
+      },
     });
-    builder.addCase(fetchPokemonListAsync.fulfilled, (state, action) => {
-      state.list = action.payload;
-      state.loading = false;
-    });
-    builder.addCase(fetchPokemonListAsync.rejected, (state, action) => {
-      state.loading = false;
-      state.error = action.error.message || '포켓몬 목록을 불러오는데 실패했습니다.';
-    });
-    
-    // 포켓몬 상세 정보 로딩 상태 처리
-    builder.addCase(fetchPokemonDetailsAsync.pending, (state) => {
-      state.loading = true;
-      state.error = null;
-    });
-    builder.addCase(fetchPokemonDetailsAsync.fulfilled, (state, action) => {
-      state.currentPokemon = action.payload;
-      state.loading = false;
-    });
-    builder.addCase(fetchPokemonDetailsAsync.rejected, (state, action) => {
-      state.loading = false;
-      state.error = action.error.message || '포켓몬 상세 정보를 불러오는데 실패했습니다.';
-    });
-    
-    // 진화 체인 로딩 상태 처리
-    builder.addCase(fetchEvolutionChainAsync.pending, (state) => {
-      state.loading = true;
-      state.error = null;
-    });
-    builder.addCase(fetchEvolutionChainAsync.fulfilled, (state, action) => {
-      state.evolutionChain = action.payload;
-      state.loading = false;
-    });
-    builder.addCase(fetchEvolutionChainAsync.rejected, (state, action) => {
-      state.loading = false;
-      state.error = action.error.message || '진화 체인을 불러오는데 실패했습니다.';
-    });
+  };
+
+  return (
+    <Container
+      $preBoot={isPreboot}
+      exit={{ scale: 1.2, opacity: 0, transition: { duration: 0.6 } }}
+      onAnimationEnd={bootupCompleted}
+    >
+      {isPreboot && (
+        <>
+          <Rotation $preBoot={isPreboot} exit={{ backgroundSize: "cover" }} />
+          <LoadingText>Loading... {Math.round(progress)}%</LoadingText>
+        </>
+      )}
+    </Container>
+  );
+};
+```
+
+### 즐겨찾기 기능 구현
+
+사용자가 포켓몬을 즐겨찾기에 추가하고 관리할 수 있습니다.
+
+```typescript
+// src/components/Footer.tsx
+const handleFavorites = () => {
+  if (isFavorites)
+    dispatch({ type: "REMOVE_FAVORITES", payload: { name: currentPokemon } });
+  else dispatch({ type: "ADD_FAVORITES", payload: { name: currentPokemon } });
+};
+
+// 즐겨찾기 버튼 렌더링
+<FavControls data-sound-effect onClick={handleFavorites}>
+  <FavContainer>
+    {isFavorites && <MdCatchingPokemon color={"#EE5054"} size={60} />}
+  </FavContainer>
+  {currentPokemon
+    ? `Add ${
+        currentPokemon[0].toUpperCase() + currentPokemon.substring(1)
+      } to Favorites`
+    : "Hover over a pokemon"}
+</FavControls>
+```
+
+## 🔄 API 통신
+
+Axios를 사용하여 PokeAPI와 통신합니다.
+
+```typescript
+// src/redux/api.ts
+export const pokeAPI = axios.create({
+  baseURL: "https://pokeapi.co/api/v2/",
+  headers: {
+    "Content-Type": "application/json",
   },
 });
 
-export const { toggleFavorite, clearCurrentPokemon } = pokemonSlice.actions;
-export default pokemonSlice.reducer;
+// 포켓몬 데이터 가져오기
+const getPokemonData = () => {
+  return async (dispatch: Dispatch) => {
+    try {
+      const allPokemonApi = pokeAPI.get("pokemon/?limit=1302");
+      const allPokemonData = await allPokemonApi.then(
+        (response) => response.data
+      );
+      const allPokemon = allPokemonData.results.map(
+        (pokemon: pokemonData) => pokemon.name
+      );
+      dispatch({
+        type: "GET_DATA_SUCCESS",
+        payload: { allPokemon },
+      });
+    } catch (error) {
+      console.error(error);
+    }
+  };
+};
 ```
 
-### 5. 진화 체인 컴포넌트 구현
+## 🔊 사운드 효과
 
-- 재귀적 컴포넌트 구조로 복잡한 진화 체인 시각화
-- 애니메이션 효과로 진화 과정 표현
-- 반응형 레이아웃 지원
+클릭 효과와 포켓몬 울음소리를 재생할 수 있습니다.
 
-```tsx
-// src/components/EvolutionChain.tsx - 진화 체인 시각화 컴포넌트
-import React from 'react';
-import styled from 'styled-components';
-import { motion } from 'framer-motion';
-import { Link } from 'react-router-dom';
-import { ProcessedEvolution } from '../utils/evolutionChainParser';
+```typescript
+// 클릭 사운드 효과
+useEffect(() => {
+  const handleClick = (e: MouseEvent) => {
+    const target = e.target as HTMLElement;
+    const soundElement = target.closest("[data-sound-effect]");
 
-interface EvolutionChainProps {
-  evolution: ProcessedEvolution;
-  isRoot?: boolean;
-}
+    if (soundElement && clickEffect.current) {
+      clickEffect.current.currentTime = 0;
+      clickEffect.current.play();
+    }
+  };
 
-const EvolutionChain: React.FC<EvolutionChainProps> = ({ 
-  evolution, 
-  isRoot = true 
-}) => {
-  // 진화 체인이 없는 경우 처리
-  if (!evolution) return null;
-  
-  // 다음 진화가 없는 경우 (마지막 진화 단계)
-  if (evolution.evolvesTo.length === 0) {
-    return (
-      <EvolutionItem
-        initial={{ opacity: 0, y: 20 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.5 }}
-      >
-        <PokemonImage src={evolution.image} alt={evolution.name} />
-        <PokemonName to={`/pokemon/${evolution.id}`}>
-          {formatPokemonName(evolution.name)}
-        </PokemonName>
-      </EvolutionItem>
-    );
-  }
-  
-  // 다음 진화가 있는 경우 (중간 진화 단계)
-  return (
-    <EvolutionContainer isRoot={isRoot}>
-      {/* 현재 포켓몬 */}
-      <EvolutionItem
-        initial={{ opacity: 0, y: 20 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.5 }}
-      >
-        <PokemonImage src={evolution.image} alt={evolution.name} />
-        <PokemonName to={`/pokemon/${evolution.id}`}>
-          {formatPokemonName(evolution.name)}
-        </PokemonName>
-      </EvolutionItem>
-      
-      {/* 진화 화살표 및 조건 */}
-      {evolution.evolvesTo.map((nextEvolution, index) => (
-        <EvolutionBranch key={index}>
-          <EvolutionArrow>
-            <ArrowIcon>→</ArrowIcon>
-            {nextEvolution.evolutionDetails.map((detail, i) => (
-              <EvolutionCondition key={i}>
-                {detail.condition || '???'}
-              </EvolutionCondition>
-            ))}
-          </EvolutionArrow>
-          
-          {/* 재귀적으로 다음 진화 렌더링 */}
-          <EvolutionChain 
-            evolution={nextEvolution} 
-            isRoot={false} 
-          />
-        </EvolutionBranch>
-      ))}
-    </EvolutionContainer>
-  );
-};
+  document.addEventListener("click", handleClick);
+  return () => document.removeEventListener("click", handleClick);
+}, []);
 
-// 포켓몬 이름 포맷팅 함수
-const formatPokemonName = (name: string): string => {
-  // 첫 글자만 대문자로 변환하고 하이픈을 공백으로 대체
-  return name
-    .split('-')
-    .map(part => part.charAt(0).toUpperCase() + part.slice(1))
-    .join(' ');
-};
-
-export default EvolutionChain;
+// 포켓몬 울음소리 재생
+<CriesBox>
+  {cries?.map((cry) => (
+    <div key={cry}>
+      <audio
+        src={pokemonData?.cries[cry]}
+        ref={audioRefs[cry]}
+      ></audio>
+      <GiSpeaker
+        size={100}
+        onClick={() => audioRefs[cry].current?.play()}
+      />
+      <span>{cry}</span>
+    </div>
+  ))}
+</CriesBox>
 ```
 
-### 6. 즐겨찾기 시스템
+## 📊 통계 차트
+
+ApexCharts를 사용하여 포켓몬 스탯을 시각화합니다.
+
+```typescript
+// src/components/StatChart.tsx
+const chartOptions: ApexOptions = {
+  chart: {
+    toolbar: {
+      show: false,
+    },
+    background: "transparent",
+  },
+  xaxis: {
+    categories: stats.map((stat) => stat.stat.name),
+    labels: {
+      style: {
+        colors: "#000",
+        fontSize: "12px",
+      },
+      formatter: (value) => {
+        if (value === "special-attack") {
+          return "sp.atk";
+        }
+        if (value === "special-defense") {
+          return "sp.def";
+        }
+        return value;
+      },
+    },
+  },
+  // ...
+};
+
+<Chart
+  options={chartOptions}
+  series={series}
+  type="radar"
+  width={250}
+  height={250}
+/>
+```
+
+### 즐겨찾기 시스템
 
 - 포켓몬 즐겨찾기 추가/제거
 - 즐겨찾기 목록 관리
 - 로컬 스토리지를 활용한 데이터 유지
 
-### 7. 게임 스타일 UI/UX
+### 게임 스타일 UI/UX
 
 - 포켓몬 블랙 & 화이트 스타일의 인터페이스
 - 사운드 이펙트 및 애니메이션
@@ -449,7 +390,6 @@ UnovaWebPokedexProject/
 - **TypeScript와 React 통합**: 타입 안전성을 갖춘 React 애플리케이션 개발 방법을 익혔습니다.
 - **Redux를 활용한 상태 관리**: Redux Toolkit을 사용하여 복잡한 애플리케이션 상태를 효율적으로 관리하는 방법을 배웠습니다.
 - **재귀적 컴포넌트 설계**: 복잡한 데이터 구조를 시각화하기 위한 재귀적 컴포넌트 설계 방법을 학습했습니다.
-- **비동기 데이터 처리**: createAsyncThunk를 활용한 비동기 데이터 로딩 및 상태 관리 방법을 익혔습니다.
 
 ### 디자인 측면
 
