@@ -1,6 +1,6 @@
 # 🎮 Unova Web Pokedex Project
 
-![Pokedex Main Image](/Bootup.jpg)
+![Pokedex Main Image](https://unovapokedexwebmastered.web.app/Bootup.jpg)
 
 ## 📋 프로젝트 정보
 
