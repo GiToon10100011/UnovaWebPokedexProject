@@ -4,7 +4,7 @@
 
 ## 📋 프로젝트 정보
 
-- **개발 기간**: 2024.12 ~ 2024.01
+- **개발 기간**: 2024.12 ~ 2025.01
 - **개발자**: 전진우
 - **배포 주소**: [https://unovapokedexwebmastered.web.app](https://unovapokedexwebmastered.web.app)
 
